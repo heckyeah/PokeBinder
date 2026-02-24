@@ -1,4 +1,15 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Pokemon Card Binder
+
+Track your Pokemon cards in binders with configurable grid sizes (e.g. 3×3, 4×4, 5×5), sort order (National Dex, Alphabetical, Kanto), search by name to get page/row/column, and check off collected Pokemon. Built with Next.js, Tailwind, and Sanity.io.
+
+## Setup
+
+1. Copy `.env.example` to `.env.local`.
+2. Create a project at [sanity.io](https://sanity.io) and set:
+   - `NEXT_PUBLIC_SANITY_PROJECT_ID`
+   - `NEXT_PUBLIC_SANITY_DATASET` (e.g. `production`)
+3. For creating binders and toggling “collected” from the app, create an API token with write access at [sanity.io/manage](https://sanity.io/manage) and set `SANITY_API_WRITE_TOKEN` in `.env.local`.
+4. Run the dev server and open `/studio` to configure Sanity Studio (same project/dataset). Add your app URL to CORS origins if you deploy.
 
 ## Getting Started
 
