@@ -59,6 +59,9 @@ export function BinderGridClient({
   const lastSavedRef = useRef<number[]>(initialCollectedIds ?? []);
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageDropdownRef = useRef<HTMLDivElement>(null);
+  const touchStartX = useRef<number | null>(null);
+
+  const SWIPE_THRESHOLD = 50;
 
   const hasUnsavedChanges = !arraysEqual(collectedIds, lastSavedRef.current);
   const showSaveButton = hasUnsavedChanges || saveStatus === "saving" || saveStatus === "saved" || saveStatus === "error";
@@ -138,6 +141,18 @@ export function BinderGridClient({
     setSaveStatus("idle");
   }
 
+  function handleSwipeEnd(clientX: number) {
+    const start = touchStartX.current;
+    touchStartX.current = null;
+    if (start == null) return;
+    const delta = clientX - start;
+    if (delta < -SWIPE_THRESHOLD && currentPage < totalPages) {
+      router.push(`/binder/${binderId}?page=${currentPage + 1}`, { scroll: false });
+    } else if (delta > SWIPE_THRESHOLD && currentPage > 1) {
+      router.push(`/binder/${binderId}?page=${currentPage - 1}`, { scroll: false });
+    }
+  }
+
   async function handleSave() {
     setSaveStatus("saving");
     const result = await setCollectedIds(binderId, collectedIds);
@@ -212,9 +227,6 @@ export function BinderGridClient({
             ← Back
           </a>
         </div>
-        {searchResult === "loading" && (
-          <p className="mt-2 text-center text-sm text-slate-500">Searching…</p>
-        )}
         {searchResult === null && searchQuery.trim() && (
           <p className="mt-2 text-center text-sm text-amber-600">No Pokemon found for &quot;{searchQuery}&quot;</p>
         )}
@@ -298,10 +310,16 @@ export function BinderGridClient({
       </section>
 
       <section
-        className="grid gap-3"
+        className="grid gap-3 touch-pan-y"
         style={{
           gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
           gridTemplateRows: `repeat(${rows}, auto)`,
+        }}
+        onTouchStart={(e) => {
+          touchStartX.current = e.touches[0].clientX;
+        }}
+        onTouchEnd={(e) => {
+          if (e.changedTouches[0]) handleSwipeEnd(e.changedTouches[0].clientX);
         }}
       >
         {slotEntries.map((entry) => {
