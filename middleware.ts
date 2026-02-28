@@ -25,5 +25,6 @@ export default async function middleware(request: NextRequest, event: NextFetchE
       return response;
     }
   }
-  return auth((req) => NextResponse.next())(request as never, event);
+  // NextAuth auth() is typed for route handlers (expects params); middleware receives NextFetchEvent. Cast to satisfy types.
+  return auth((req) => NextResponse.next())(request, event as unknown as { params: Promise<Record<string, string>> });
 }
