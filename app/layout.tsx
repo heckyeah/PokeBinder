@@ -25,9 +25,20 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} flex min-h-screen flex-col antialiased`}
       >
-        {children}
+        <main className="flex-1">{children}</main>
+        <footer className="bg-slate-100 py-3 text-center text-sm text-slate-500">
+          <a
+            href="https://whothehek.nz"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-slate-700 hover:underline"
+          >
+            Whothehek.nz
+          </a>{" "}
+          made this
+        </footer>
       </body>
     </html>
   );

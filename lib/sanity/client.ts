@@ -8,7 +8,7 @@ export const sanityClient = createClient({
   projectId: projectId || "placeholder",
   dataset,
   apiVersion,
-  useCdn: true,
+  useCdn: false,
 });
 
 export const sanityClientWithToken = createClient({

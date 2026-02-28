@@ -29,6 +29,8 @@ export function CreateBinderForm() {
       const result = await createBinder({ name, rows, columns, sortOrder });
       if (result.success) {
         router.push(`/binder/${result.id}`);
+      } else if (result.error === "Unauthorized") {
+        router.push(`/login?callbackUrl=${encodeURIComponent(window.location.pathname || "/")}`);
       } else {
         alert(result.error);
       }

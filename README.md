@@ -9,7 +9,10 @@ Track your Pokemon cards in binders with configurable grid sizes (e.g. 3×3, 4×
    - `NEXT_PUBLIC_SANITY_PROJECT_ID`
    - `NEXT_PUBLIC_SANITY_DATASET` (e.g. `production`)
 3. For creating binders and toggling “collected” from the app, create an API token with write access at [sanity.io/manage](https://sanity.io/manage) and set `SANITY_API_WRITE_TOKEN` in `.env.local`.
-4. Run the dev server and open `/studio` to configure Sanity Studio (same project/dataset). Add your app URL to CORS origins if you deploy.
+4. Generate an auth secret (e.g. `npx auth secret`) and set `AUTH_SECRET` in `.env.local` for login/register.
+5. Run the dev server and open `/studio` to configure Sanity Studio (same project/dataset). Add your app URL to CORS origins if you deploy.
+
+**Example binder:** One binder can be marked as the shared “example” that everyone can view and edit (e.g. Pokedex 4×5). In Sanity Studio, open a binder document, set **Example binder** to `true`, and leave **Owner ID** empty. That binder will appear under “Example binder” on the home page for all users.
 
 ## Getting Started
 

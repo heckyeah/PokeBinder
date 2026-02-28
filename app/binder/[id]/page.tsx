@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { getSession } from "@/auth";
 import { getBinderById } from "@/app/actions/binder";
 import { getOrderedPokemonList } from "@/lib/pokemon";
 import type { SortOrder } from "@/lib/pokemon";
@@ -11,13 +12,14 @@ export default async function BinderPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ page?: string; highlight?: string }>;
 }) {
+  const session = await getSession();
   const { id } = await params;
   const { page: pageParam, highlight: highlightParam } = await searchParams;
   const highlightId =
     highlightParam != null ? parseInt(highlightParam, 10) : null;
   const highlightIdValid =
     highlightId != null && !Number.isNaN(highlightId) ? highlightId : null;
-  const binder = await getBinderById(id);
+  const binder = await getBinderById(id, session);
   if (!binder) notFound();
 
   const rows = binder.rows ?? 3;
@@ -42,6 +44,7 @@ export default async function BinderPage({
         binderName={binder.name || `Binder ${rows}×${columns}`}
         slotEntries={slotEntries}
         collectedIds={binder.collectedIds ?? []}
+        slotCards={binder.slotCards ?? []}
         rows={rows}
         columns={columns}
         currentPage={currentPage}

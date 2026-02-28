@@ -3,8 +3,11 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { setCollectedIds, searchInBinder, getPokemonSuggestions, type SearchResult } from "@/app/actions/binder";
+import { setCollectedIds, setSlotCards, searchInBinder, getPokemonSuggestions, type SearchResult } from "@/app/actions/binder";
 import type { PokemonEntry } from "@/lib/pokemon";
+import { CardPickerModal } from "./CardPickerModal";
+import type { SlotCardAssignment } from "@/app/actions/binder";
+import { getLanguageShortLabel } from "@/lib/tcgdex";
 
 function toggleIdInList(ids: number[], id: number): number[] {
   const set = new Set(ids);
@@ -22,34 +25,82 @@ function arraysEqual(a: number[], b: number[]): boolean {
 const SPRITE_BASE =
   "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon";
 
+export type SlotCardsMap = Record<number, { tcgCardId: string; imageUrl?: string; language?: string }>;
+
 type Props = {
   binderId: string;
   binderName: string;
   slotEntries: PokemonEntry[];
   collectedIds: number[];
+  slotCards?: SlotCardAssignment[] | null;
   rows: number;
   columns: number;
   currentPage: number;
   totalPages: number;
   sortOrder: string;
   highlightId?: number | null;
+  /** When "/", links use /?page=... (for home page). Defaults to /binder/{binderId}. */
+  basePath?: string;
+  /** Optional content rendered above the pagination (e.g. Sign in / Sign up on home). */
+  topSlot?: React.ReactNode;
 };
+
+function buildPageUrl(basePath: string, binderId: string, page: number, highlightId?: number | null): string {
+  const qs = `page=${page}${highlightId != null ? `&highlight=${highlightId}` : ""}`;
+  return basePath === "/" ? `/?${qs}` : `${basePath}?${qs}`;
+}
+
+function buildSlotCardsMap(slotCards: SlotCardAssignment[] | null | undefined): SlotCardsMap {
+  const map: SlotCardsMap = {};
+  for (const s of slotCards ?? []) {
+    const key = typeof s.pokemonId === "number" ? s.pokemonId : Number(s.pokemonId);
+    if (!Number.isNaN(key)) {
+      map[key] = { tcgCardId: s.tcgCardId, imageUrl: s.imageUrl, language: s.language };
+    }
+  }
+  return map;
+}
+
+function slotCardsMapToArray(map: SlotCardsMap): SlotCardAssignment[] {
+  return Object.entries(map).map(([pokemonId, v]) => ({
+    pokemonId: Number(pokemonId),
+    tcgCardId: v.tcgCardId,
+    imageUrl: v.imageUrl,
+    language: v.language,
+  }));
+}
+
+function slotCardsArraysEqual(a: SlotCardAssignment[], b: SlotCardAssignment[]): boolean {
+  if (a.length !== b.length) return false;
+  const byId = new Map(a.map((s) => [s.pokemonId, s]));
+  return b.every((s) => {
+    const x = byId.get(s.pokemonId);
+    return x && x.tcgCardId === s.tcgCardId && (x.imageUrl ?? "") === (s.imageUrl ?? "") && (x.language ?? "") === (s.language ?? "");
+  });
+}
 
 export function BinderGridClient({
   binderId,
   binderName,
   slotEntries,
   collectedIds: initialCollectedIds,
+  slotCards: initialSlotCards,
   rows,
   columns,
   currentPage,
   totalPages,
   sortOrder,
   highlightId,
+  basePath = `/binder/${binderId}`,
+  topSlot,
 }: Props) {
   const [collectedIds, setCollectedIdsState] = useState<number[]>(
     () => initialCollectedIds ?? []
   );
+  const [slotCardsMap, setSlotCardsMap] = useState<SlotCardsMap>(
+    () => buildSlotCardsMap(initialSlotCards ?? [])
+  );
+  const [cardPickerEntry, setCardPickerEntry] = useState<PokemonEntry | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResult, setSearchResult] = useState<SearchResult | null | "loading">(null);
   const [suggestions, setSuggestions] = useState<PokemonEntry[]>([]);
@@ -57,14 +108,32 @@ export function BinderGridClient({
   const [pageDropdownOpen, setPageDropdownOpen] = useState(false);
   const router = useRouter();
   const lastSavedRef = useRef<number[]>(initialCollectedIds ?? []);
+  const lastSavedSlotCardsRef = useRef<SlotCardAssignment[]>(
+    initialSlotCards ?? []
+  );
   const suggestTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pageDropdownRef = useRef<HTMLDivElement>(null);
   const touchStartX = useRef<number | null>(null);
 
+  useEffect(() => {
+    const fromServer = buildSlotCardsMap(initialSlotCards ?? []);
+    setSlotCardsMap((prev) => ({ ...fromServer, ...prev }));
+  }, [initialSlotCards]);
+
   const SWIPE_THRESHOLD = 50;
 
+  const currentSlotCardsArray = slotCardsMapToArray(slotCardsMap);
   const hasUnsavedChanges = !arraysEqual(collectedIds, lastSavedRef.current);
-  const showSaveButton = hasUnsavedChanges || saveStatus === "saving" || saveStatus === "saved" || saveStatus === "error";
+  const hasUnsavedSlotCards = !slotCardsArraysEqual(
+    currentSlotCardsArray,
+    lastSavedSlotCardsRef.current
+  );
+  const showSaveButton =
+    hasUnsavedChanges ||
+    hasUnsavedSlotCards ||
+    saveStatus === "saving" ||
+    saveStatus === "saved" ||
+    saveStatus === "error";
 
   const collectedSet = new Set(collectedIds);
 
@@ -116,7 +185,7 @@ export function BinderGridClient({
     setSearchResult("loading");
     searchInBinder(binderId, q).then((res) => {
       if (res) {
-        router.push(`/binder/${binderId}?page=${res.page}&highlight=${res.id}`, { scroll: false });
+        router.push(buildPageUrl(basePath, binderId, res.page, res.id), { scroll: false });
       } else {
         setSearchResult(null);
       }
@@ -129,7 +198,7 @@ export function BinderGridClient({
     setSearchResult("loading");
     searchInBinder(binderId, name).then((res) => {
       if (res) {
-        router.push(`/binder/${binderId}?page=${res.page}&highlight=${res.id}`, { scroll: false });
+        router.push(buildPageUrl(basePath, binderId, res.page, res.id), { scroll: false });
       } else {
         setSearchResult(null);
       }
@@ -141,27 +210,76 @@ export function BinderGridClient({
     setSaveStatus("idle");
   }
 
+  function handleSlotClick(entry: PokemonEntry) {
+    setCardPickerEntry(entry);
+  }
+
+  function handleClearSlot(entry: PokemonEntry, e: React.MouseEvent) {
+    e.stopPropagation();
+    setSlotCardsMap((prev) => {
+      const next = { ...prev };
+      delete next[entry.id];
+      return next;
+    });
+    setCollectedIdsState((prev) => prev.filter((id) => id !== entry.id));
+    setSaveStatus("idle");
+  }
+
+  function handleCardSelected(tcgCardId: string | null, imageUrl?: string, language?: string) {
+    if (!cardPickerEntry) return;
+    setSlotCardsMap((prev) => {
+      const next = { ...prev };
+      if (tcgCardId == null) {
+        delete next[cardPickerEntry.id];
+      } else {
+        next[cardPickerEntry.id] = { tcgCardId, imageUrl, language };
+      }
+      return next;
+    });
+    if (tcgCardId != null) {
+      setCollectedIdsState((prev) =>
+        prev.includes(cardPickerEntry.id) ? prev : [...prev, cardPickerEntry.id]
+      );
+      setSaveStatus("idle");
+    } else {
+      setCollectedIdsState((prev) => prev.filter((id) => id !== cardPickerEntry.id));
+      setSaveStatus("idle");
+    }
+    setCardPickerEntry(null);
+  }
+
   function handleSwipeEnd(clientX: number) {
     const start = touchStartX.current;
     touchStartX.current = null;
     if (start == null) return;
     const delta = clientX - start;
     if (delta < -SWIPE_THRESHOLD && currentPage < totalPages) {
-      router.push(`/binder/${binderId}?page=${currentPage + 1}`, { scroll: false });
+      router.push(buildPageUrl(basePath, binderId, currentPage + 1), { scroll: false });
     } else if (delta > SWIPE_THRESHOLD && currentPage > 1) {
-      router.push(`/binder/${binderId}?page=${currentPage - 1}`, { scroll: false });
+      router.push(buildPageUrl(basePath, binderId, currentPage - 1), { scroll: false });
     }
   }
 
   async function handleSave() {
-    setSaveStatus("saving");
-    const result = await setCollectedIds(binderId, collectedIds);
-    if (result.success) {
-      lastSavedRef.current = [...collectedIds];
-      setSaveStatus("saved");
-      setTimeout(() => setSaveStatus("idle"), 2000);
-    } else {
+    const prevIds = lastSavedRef.current;
+    const prevSlotCards = lastSavedSlotCardsRef.current;
+    lastSavedRef.current = [...collectedIds];
+    lastSavedSlotCardsRef.current = [...currentSlotCardsArray];
+    setSaveStatus("saved");
+    setTimeout(() => setSaveStatus("idle"), 2000);
+
+    const [idsResult, slotCardsResult] = await Promise.all([
+      setCollectedIds(binderId, collectedIds),
+      setSlotCards(binderId, currentSlotCardsArray),
+    ]);
+    if (!idsResult.success || !slotCardsResult.success) {
+      lastSavedRef.current = prevIds;
+      lastSavedSlotCardsRef.current = prevSlotCards;
       setSaveStatus("error");
+      const err = idsResult.success ? slotCardsResult.error : idsResult.error;
+      if (err === "Forbidden") {
+        router.push(`/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
+      }
     }
   }
 
@@ -212,20 +330,22 @@ export function BinderGridClient({
               </button>
             </form>
           </div>
-          <a
-            href="/"
-            onClick={(e) => {
-              if (hasUnsavedChanges) {
-                e.preventDefault();
-                if (window.confirm("You have unsaved changes. Leave anyway?")) {
-                  router.push("/");
+          {basePath !== "/" ? (
+            <a
+              href="/"
+              onClick={(e) => {
+                if (hasUnsavedChanges || hasUnsavedSlotCards) {
+                  e.preventDefault();
+                  if (window.confirm("You have unsaved changes. Leave anyway?")) {
+                    router.push("/");
+                  }
                 }
-              }
-            }}
-            className="shrink-0 whitespace-nowrap text-xs font-medium text-blue-600 hover:underline md:text-sm"
-          >
-            ← Back
-          </a>
+              }}
+              className="shrink-0 whitespace-nowrap text-xs font-medium text-blue-600 hover:underline md:text-sm"
+            >
+              ← Back
+            </a>
+          ) : null}
         </div>
         {searchResult === null && searchQuery.trim() && (
           <p className="mt-2 text-center text-sm text-amber-600">No Pokemon found for &quot;{searchQuery}&quot;</p>
@@ -244,9 +364,10 @@ export function BinderGridClient({
       </header>
 
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6 md:px-6">
+      {topSlot ? <section className="flex items-center justify-center gap-3">{topSlot}</section> : null}
       <section className="flex items-center justify-center gap-3">
         <Link
-          href={currentPage > 1 ? `/binder/${binderId}?page=${currentPage - 1}` : "#"}
+          href={currentPage > 1 ? buildPageUrl(basePath, binderId, currentPage - 1) : "#"}
           scroll={false}
           className={`rounded px-4 py-2 font-medium ${
             currentPage > 1
@@ -275,7 +396,7 @@ export function BinderGridClient({
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                 <li key={page} role="option" aria-selected={page === currentPage}>
                   <Link
-                    href={`/binder/${binderId}?page=${page}`}
+                    href={buildPageUrl(basePath, binderId, page)}
                     scroll={false}
                     onClick={() => setPageDropdownOpen(false)}
                     className={`block rounded px-2 py-1.5 text-center text-sm ${
@@ -294,7 +415,7 @@ export function BinderGridClient({
         <Link
           href={
             currentPage < totalPages
-              ? `/binder/${binderId}?page=${currentPage + 1}`
+              ? buildPageUrl(basePath, binderId, currentPage + 1)
               : "#"
           }
           scroll={false}
@@ -324,32 +445,69 @@ export function BinderGridClient({
       >
         {slotEntries.map((entry) => {
           const collected = collectedSet.has(entry.id);
+          const slotCard = slotCardsMap[entry.id];
+          const hasCard = collected || !!slotCard;
           const isHighlighted = highlightId != null && entry.id === highlightId;
+          const slotImageUrl =
+            slotCard?.imageUrl?.trim()
+              ? slotCard.imageUrl
+              : slotCard?.tcgCardId
+                ? `/api/tcg-images?id=${encodeURIComponent(slotCard.tcgCardId)}&size=low`
+                : undefined;
           return (
-            <button
+            <div
               key={entry.id}
-              type="button"
-              onClick={() => handleToggle(entry.id)}
               className={`flex flex-col items-center rounded-lg p-1 text-left transition ${
-                collected
+                hasCard
                   ? "bg-green-100 ring-2 ring-green-500"
                   : isHighlighted
                     ? "ring-2 ring-yellow-500 bg-yellow-50/80"
                     : "bg-white hover:bg-slate-50"
               }`}
             >
-              <img
-                src={`${SPRITE_BASE}/${entry.id}.png`}
-                alt={entry.name}
-                className="h-14 w-14 object-contain"
-              />
-              <span className="mt-1 truncate w-full text-center text-xs font-medium capitalize text-slate-700">
-                {entry.name}
-              </span>
-              <span className="mt-0.5 text-xs text-slate-500">
-                {collected ? "✓ Have it" : "Have it"}
-              </span>
-            </button>
+              <button
+                type="button"
+                onClick={() => handleSlotClick(entry)}
+                className="flex flex-col items-center w-full min-w-0"
+              >
+                <div className="relative">
+                  {slotImageUrl ? (
+                    <img
+                      src={slotImageUrl}
+                      alt={entry.name}
+                      className="h-14 w-14 object-contain"
+                    />
+                  ) : (
+                    <img
+                      src={`${SPRITE_BASE}/${entry.id}.png`}
+                      alt={entry.name}
+                      className="h-14 w-14 object-contain"
+                    />
+                  )}
+                  {slotCard?.language && (
+                    <span
+                      className="absolute -top-0.5 -right-0.5 rounded bg-slate-700 px-1 py-0.5 text-[10px] font-medium text-white"
+                      title={slotCard.language}
+                    >
+                      {getLanguageShortLabel(slotCard.language)}
+                    </span>
+                  )}
+                </div>
+                <span className="mt-1 truncate w-full text-center text-xs font-medium capitalize text-slate-700">
+                  {entry.name}
+                </span>
+              </button>
+              {slotCard && (
+                <button
+                  type="button"
+                  onClick={(e) => handleClearSlot(entry, e)}
+                  className="mt-0.5 text-xs text-slate-500 hover:text-red-600"
+                  title="Remove card and show sprite"
+                >
+                  Uncheck
+                </button>
+              )}
+            </div>
           );
         })}
       </section>
@@ -373,6 +531,17 @@ export function BinderGridClient({
         </div>
       )}
       </main>
+
+      {cardPickerEntry && (
+        <CardPickerModal
+          open={true}
+          onClose={() => setCardPickerEntry(null)}
+          pokemonEntry={cardPickerEntry}
+          binderId={binderId}
+          currentTcgCardId={slotCardsMap[cardPickerEntry.id]?.tcgCardId}
+          onCardSelected={handleCardSelected}
+        />
+      )}
     </>
   );
 }

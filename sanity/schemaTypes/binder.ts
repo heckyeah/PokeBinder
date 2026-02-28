@@ -6,6 +6,19 @@ export const binderType = defineType({
   type: "document",
   fields: [
     defineField({
+      name: "ownerId",
+      title: "Owner ID",
+      type: "string",
+      description: "Sanity user _id; omitted for the shared example binder",
+    }),
+    defineField({
+      name: "isExample",
+      title: "Example binder",
+      type: "boolean",
+      initialValue: false,
+      description: "When true, everyone can view and edit this binder",
+    }),
+    defineField({
       name: "name",
       title: "Name",
       type: "string",
@@ -44,6 +57,24 @@ export const binderType = defineType({
       type: "array",
       of: [{ type: "number" }],
       description: "National Dex IDs that the user has checked off as owned",
+      initialValue: [],
+    }),
+    defineField({
+      name: "slotCards",
+      title: "Slot card assignments",
+      type: "array",
+      of: [
+        {
+          type: "object",
+          fields: [
+            { name: "pokemonId", type: "number", title: "Pokemon ID" },
+            { name: "tcgCardId", type: "string", title: "TCG card ID" },
+            { name: "imageUrl", type: "string", title: "Card image URL" },
+            { name: "language", type: "string", title: "Card language" },
+          ],
+        },
+      ],
+      description: "Maps binder slots (Pokemon ID) to chosen TCG card IDs",
       initialValue: [],
     }),
   ],
